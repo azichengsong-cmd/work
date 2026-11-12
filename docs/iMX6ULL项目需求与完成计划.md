@@ -16,7 +16,7 @@
 | 编号 | 需求 | 主要涉及模块 | 当前状态 |
 | --- | --- | --- | --- |
 | 1 | uboot 下添加 logo 显示 | uboot | 代码已改，待板端验证 |
-| 2 | 修改调试串口为 UART2 | uboot + 内核设备树 | 代码已改，待板端验证 |
+| 2 | 修改调试串口为 UART2 | uboot + 内核设备树 | 首次改动串口失联已回退为 UART1，待接线确认后重新启用 |
 | 3 | DDR 压力测试 | uboot | 代码已改，待板端验证 |
 | 4 | 调试 RS485 接口 | 内核设备树 + 应用 | 测试程序已编，待板端验证 |
 | 5 | 适配 4G 模块 EC20 | 内核/驱动 + 应用 | 待开始 |
@@ -55,7 +55,8 @@
 **自定义全屏 logo 制作与烧录步骤（使用 docs/aabb.bmp）**：
 
 > 分工标记：【我已完成✔】= AI 已执行并验证，不用再做；【你执行→】= 需要你在 Ubuntu / 开发板上操作。
-> **本次要烧录的文件一共 2 个：u-boot.imx（971KB）+ topeet_emmc_1024x600.dtb；zImage、文件系统无改动，不用重新烧。**
+> **本次要烧录的文件：u-boot.imx（971KB，必须）+ topeet_emmc_1024x600.dtb（本次已回退为与出厂等效，上次若替换过请用新编译的再替换一次）；zImage、文件系统无改动，不用重新烧。**
+> UART2 改动已全部回退（原因见 3.2 回退说明），当前串口仍走 UART1。
 
 1. 【我已完成✔】**转换图片格式**。uboot 的 `tools/bmp_logo` 工具只认 8 位调色板 BMP（256 色索引格式），
    原始 `docs/aabb.bmp` 是 24 位色，需要转换。转换脚本已写好（`scripts/make_logo.py`，用 Python PIL，
@@ -99,8 +100,8 @@
 
    | # | 文件 | 来源路径（Ubuntu 里） | 原因 |
    | --- | --- | --- | --- |
-   | 1 | u-boot.imx（994304 字节） | `sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/u-boot.imx` | 新 logo + 调试串口 UART2 + 环境变量挪到 2MB |
-   | 2 | topeet_emmc_1024x600.dtb | `sdk/linux-imx-rel_imx_4.1.15_2.1.0_ga/arch/arm/boot/dts/topeet_emmc_1024x600.dtb` | 内核侧 UART2 使能。**必须一起换**，否则内核起来后控制台失联 |
+   | 1 | u-boot.imx（994304 字节） | `sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/u-boot.imx` | 新 logo + 环境变量挪到 2MB（串口已回退为 UART1） |
+   | 2 | topeet_emmc_1024x600.dtb | `sdk/linux-imx-rel_imx_4.1.15_2.1.0_ga/arch/arm/boot/dts/topeet_emmc_1024x600.dtb` | 本次已回退为与出厂等效；上次烧录若替换过 dtb，请用本次新编译的再替换一次 |
 
    方式 A（你正在用的：迅为 mfgtool，OTG 烧录）：
    把上面 2 个文件从 Ubuntu 拷到 Windows（共享文件夹/SCP 均可），替换烧录工具目录里的同名文件，
@@ -117,11 +118,11 @@
      ```
 
 6. 【你执行→】**首次开机**。烧录后上电：屏幕应显示你自己的 logo（全屏）。注意环境变量位置已挪到 2MB，
-   旧环境自动失效、使用编译默认值（`console=ttymxc1`、`lcdtype=1024x600`），
+   旧环境自动失效、使用编译默认值（`console=ttymxc0`、`lcdtype=1024x600`），
    建议进入 uboot 后执行一次固化：
 
    ```
-   setenv console ttymxc1
+   setenv console ttymxc0
    setenv lcdtype 1024x600
    setenv fdt_file topeet_emmc_1024x600.dtb
    saveenv
@@ -134,12 +135,19 @@
 
 ### 3.2 修改调试串口为 UART2（第 2 项）
 
+> **2026-11-12 回退说明**：首次烧录验证发现串口完全无输出。原因：uboot console 已改为 ttymxc1（UART2），
+> 但板上 dtb 仍为出厂版（uart2 = disabled），内核中 ttymxc1 设备不存在；且串口线接在 UART1 上。
+> uboot 阶段的新 logo 显示正常（屏幕先显示新 logo 数秒），随后被内核/出厂 rootfs 的启动画面接管，属于正常接力（内核阶段 logo 属第 8 项需求）。
+> 已将 UART2 相关改动**全部回退**：uboot `UART1_BASE`/`console=ttymxc0`、板级 `uart2_pads`、
+> dts `stdout-path`/`ir_recv`/`pinctrl_uart2`/`&uart2 status`。回退后 dts 与板级 C 文件与出厂备份 diff 为空。
+> 重新启用 UART2 时必须三者配套一次切换：uboot console + 内核 dts + 核心板 48/49 脚接线。
+
 **原因**：uboot 的调试串口基地址、引脚、默认 console 都指向 UART1；内核的 `stdout-path` 也指向 uart1。
 另外 UART2 的 RX 引脚（`GPIO1_IO21`）与板上的红外接收节点 `ir_recv` 冲突，必须二选一。
 
-**修改内容**：
+**修改内容**（以下改动已于 2026-11-12 全部回退，仅留档供重新启用时参考）：
 
-| 文件 | 修改 |
+| 文件 | 修改（已回退） |
 | --- | --- |
 | `include/configs/mx6ul_topeet.h` | `CONFIG_MXC_UART_BASE` 改为 `UART2_BASE` |
 | `include/configs/mx6ul_topeet.h` | 默认环境 `console=ttymxc0` 改为 `console=ttymxc1` |
@@ -151,10 +159,10 @@
 
 **保留项**：uboot 仍配置 UART1 引脚；内核 `&uart1` 仍为 `okay`，`/dev/ttymxc0` 可作为普通串口使用。
 
-**板端环境变量**（旧环境优先级高于编译默认值）：
+**板端环境变量**（串口恢复 UART1 后使用）：
 
 ```
-setenv console ttymxc1
+setenv console ttymxc0
 setenv lcdtype 1024x600
 setenv fdt_file topeet_emmc_1024x600.dtb
 saveenv
@@ -229,7 +237,7 @@ make topeet_emmc_1024x600.dtb
 
 烧写方式：使用现有 USB OTG + mfgtool/uuu 流程烧写 `u-boot.imx`；dtb 放到 eMMC 的 FAT 启动分区并保持文件名为 `topeet_emmc_1024x600.dtb`。
 
-本次（最近一次）编译结果：uboot 与 dtb 均编译通过；uboot 镜像中已确认包含 `console=ttymxc1`、`lcdtype=1024x600`。
+本次（最近一次）编译结果：uboot 与 dtb 均编译通过；uboot 镜像中已确认包含 `console=ttymxc0`、`lcdtype=1024x600`（UART2 已回退）。
 
 ## 五、依赖与待办
 
@@ -245,3 +253,4 @@ make topeet_emmc_1024x600.dtb
 | 2026-11-12 | 完成第 1~4 项代码修改：uboot logo/lcdtype、UART2 调试串口、DDR mtest 范围、RS485 测试程序；uboot 与 dtb 编译通过 |
 | 2026-11-12 | 内置 logo 替换为自定义图 docs/aabb.bmp（1024x600 全屏，8 位 BMP）；`CONFIG_ENV_OFFSET` 768KB→2MB（防止被 966KB 的 uboot 镜像覆盖）；新增 `scripts/make_logo.py` 转换脚本；u-boot.imx ≈ 971KB |
 | 2026-11-12 | 烧录步骤标注分工（【我已完成✔】/【你执行→】）；明确本次需烧录 2 个文件：u-boot.imx + topeet_emmc_1024x600.dtb，zImage/文件系统不用重新烧 |
+| 2026-11-12 | UART2 改动全部回退为 UART1（串口失联根因：新 uboot console=ttymxc1 与出厂 dtb uart2=disabled 不配套）；保留 logo/lcdtype/env 偏移/mtest；u-boot.imx 重新编译（994304 字节，ttymxc1 已清零），dtb 与出厂等效 |
