@@ -1,5 +1,5 @@
---- a/sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h	2026-11-12 10:15:04.753571918 +0800
-+++ b/sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h	2026-11-12 11:39:06.873145209 +0800
+--- a/sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h.bak	2026-11-12 10:15:04.753571918 +0800
++++ b/sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h	2026-11-12 14:05:45.628548787 +0800
 @@ -63,7 +63,7 @@
  #define CONFIG_MXC_UART_BASE		UART1_BASE
  
@@ -35,14 +35,18 @@
  
  #define CONFIG_SYS_LOAD_ADDR		CONFIG_LOADADDR
  #define CONFIG_SYS_HZ			1000
-@@ -303,7 +304,9 @@
+@@ -303,7 +304,13 @@
  
  #define CONFIG_ENV_SIZE			SZ_8K
  #if defined(CONFIG_ENV_IS_IN_MMC)
 -#define CONFIG_ENV_OFFSET		(12 * SZ_64K)
-+/* moved from (12 * SZ_64K)=768KB: 1024x600 builtin logo makes u-boot >1MB,
-+ * env at 768KB would be overwritten by the u-boot image itself */
-+#define CONFIG_ENV_OFFSET		(32 * SZ_64K)
++/* ENV 偏移调整历史：
++ *  原厂 768KB (12*SZ_64K)  —— 被 966KB 的新 uboot 镜像覆盖风险
++ *  第1次改 2MB (32*SZ_64K) —— 但旧 uboot(UART2版) 的 saveenv 已在此处写入 console=ttymxc1，
++ *                               后续新 uboot 读到该 ENV 会覆盖编译默认 console=ttymxc0，
++ *                               导致 CH340G(UART1) 口无输出
++ *  第2次改 8MB (128*SZ_64K)—— 避开 2MB 处残留的旧 ENV 区域，也确保在 FAT 启动分区之后 */
++#define CONFIG_ENV_OFFSET		(128 * SZ_64K)
  #elif defined(CONFIG_ENV_IS_IN_SPI_FLASH)
  #define CONFIG_ENV_OFFSET		(768 * 1024)
  #define CONFIG_ENV_SECT_SIZE		(64 * 1024)

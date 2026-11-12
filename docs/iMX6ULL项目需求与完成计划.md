@@ -33,8 +33,6 @@
 | 16 | 文件系统中添加中文支持 | 文件系统（buildroot） | 待开始 |
 | 17 | 系统优化：优化启动时间、裁剪多余驱动 | uboot + 内核 + 文件系统 | 待开始 |
 
-说明：编号顺序按需求原文排列；“当前状态”以本文档最后更新时间为准。
-
 ## 三、前四项需求的实现说明
 
 ### 3.1 uboot 添加 logo 显示（第 1 项）
@@ -78,13 +76,17 @@
 
 3. 【我已完成✔】**环境变量偏移必须同步挪动（关键）**。1024x600 的 8 位 logo 会让 u-boot 从 505KB 增大到 966KB，
    而原环境变量存放在 eMMC 偏移 768KB 处（`CONFIG_ENV_OFFSET (12 * SZ_64K)`），会被新的 uboot 镜像覆盖，
-   之后一旦 `saveenv` 还会写坏 uboot 自身。已在 `include/configs/mx6ul_topeet.h` 中改为：
+   之后一旦 `saveenv` 还会写坏 uboot 自身。已挪到 8MB 处：
 
    ```c
-   #define CONFIG_ENV_OFFSET		(32 * SZ_64K)   /* 2MB */
+   #define CONFIG_ENV_OFFSET		(128 * SZ_64K)   /* 8MB */
    ```
 
-   新镜像结束于约 966KB，环境变量在 2MB 处，间隔约 1MB，安全。
+   为什么不只用 2MB？因为第一次改动（UART2 版）已经把 `console=ttymxc1` 的 ENV 写到了 2MB 处，
+   如果只改回 UART1 但 ENV 还在 2MB，新 uboot 启动时会读到旧 ENV 里的 `console=ttymxc1`，
+   覆盖编译默认值 `console=ttymxc0`，导致 CH340G（UART1）口无输出。改到 8MB 彻底避开残留的旧 ENV 区域。
+
+   新镜像结束于约 966KB，ENV 在 8MB 处，间隔约 7MB，安全。
 
 4. 【我已完成✔】**重新编译 uboot**：
 
@@ -100,7 +102,7 @@
 
    | # | 文件 | 来源路径（Ubuntu 里） | 原因 |
    | --- | --- | --- | --- |
-   | 1 | u-boot.imx（994304 字节） | `sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/u-boot.imx` | 新 logo + 环境变量挪到 2MB（串口已回退为 UART1） |
+   | 1 | u-boot.imx（994304 字节，14:06 编译） | `sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/u-boot.imx` | 新 logo + ENV 偏移 8MB（避开旧 ENV） + 串口 UART1 恢复 |
    | 2 | topeet_emmc_1024x600.dtb | `sdk/linux-imx-rel_imx_4.1.15_2.1.0_ga/arch/arm/boot/dts/topeet_emmc_1024x600.dtb` | 本次已回退为与出厂等效；上次烧录若替换过 dtb，请用本次新编译的再替换一次 |
 
    方式 A（你正在用的：迅为 mfgtool，OTG 烧录）：
@@ -117,9 +119,9 @@
      mmc write 0x80800000 2 0x800      # 写入 2048 个扇区(1MB)，覆盖新镜像 971KB
      ```
 
-6. 【你执行→】**首次开机**。烧录后上电：屏幕应显示你自己的 logo（全屏）。注意环境变量位置已挪到 2MB，
-   旧环境自动失效、使用编译默认值（`console=ttymxc0`、`lcdtype=1024x600`），
-   建议进入 uboot 后执行一次固化：
+6. 【你执行→】**首次开机**。烧录后上电：屏幕应显示你自己的 logo（全屏）。ENV 已挪到 8MB，
+   eMMC 上 2MB 处残留的旧 ENV（console=ttymxc1）不会被读到，uboot 直接用编译默认值（`console=ttymxc0`、`lcdtype=1024x600`），
+   CH340G 串口应该恢复输出。进入 uboot 后执行一次固化：
 
    ```
    setenv console ttymxc0
@@ -129,7 +131,7 @@
    ```
 
    **烧录前确认**（方式 B 或不确定分区布局时）：在 uboot 里执行 `mmc part`，确认分区 1 的起始扇区
-   大于 4096（即 2MB），否则环境变量会写进分区，需要告诉我再调整偏移。
+   不超过 16384（即 8MB），否则 ENV 会写进分区，需要告诉我再调整偏移。
 
 **以后换 logo 只需重复 1、2、4、5 步**（环境变量偏移不用再改）。
 
@@ -254,3 +256,4 @@ make topeet_emmc_1024x600.dtb
 | 2026-11-12 | 内置 logo 替换为自定义图 docs/aabb.bmp（1024x600 全屏，8 位 BMP）；`CONFIG_ENV_OFFSET` 768KB→2MB（防止被 966KB 的 uboot 镜像覆盖）；新增 `scripts/make_logo.py` 转换脚本；u-boot.imx ≈ 971KB |
 | 2026-11-12 | 烧录步骤标注分工（【我已完成✔】/【你执行→】）；明确本次需烧录 2 个文件：u-boot.imx + topeet_emmc_1024x600.dtb，zImage/文件系统不用重新烧 |
 | 2026-11-12 | UART2 改动全部回退为 UART1（串口失联根因：新 uboot console=ttymxc1 与出厂 dtb uart2=disabled 不配套）；保留 logo/lcdtype/env 偏移/mtest；u-boot.imx 重新编译（994304 字节，ttymxc1 已清零），dtb 与出厂等效 |
+| 2026-11-12 | **ENV 偏移从 2MB(32*64K)→8MB(128*64K)**，原因：旧 uboot(UART2 版) 的 saveenv 已在 2MB 处写入 console=ttymxc1，新 uboot 读到会覆盖编译默认 console=ttymxc0，导致 CH340G(UART1) 口无输出；改到 8MB 彻底避开；u-boot.imx 重新编译（14:06，console=ttymxc0、ttymxc1=0次、logo 1024x600） |
