@@ -302,7 +302,9 @@
 
 #define CONFIG_ENV_SIZE			SZ_8K
 #if defined(CONFIG_ENV_IS_IN_MMC)
-#define CONFIG_ENV_OFFSET		(12 * SZ_64K)
+/* moved from (12 * SZ_64K)=768KB: 1024x600 builtin logo makes u-boot >1MB,
+ * env at 768KB would be overwritten by the u-boot image itself */
+#define CONFIG_ENV_OFFSET		(32 * SZ_64K)
 #elif defined(CONFIG_ENV_IS_IN_SPI_FLASH)
 #define CONFIG_ENV_OFFSET		(768 * 1024)
 #define CONFIG_ENV_SECT_SIZE		(64 * 1024)

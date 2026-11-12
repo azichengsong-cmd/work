@@ -1,5 +1,5 @@
 --- sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h.bak	2026-11-12 10:15:04.753571918 +0800
-+++ sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h	2026-11-12 10:15:14.377517125 +0800
++++ sdk/uboot-imx-rel_imx_4.1.15_2.1.0_ga/include/configs/mx6ul_topeet.h	2026-11-12 10:53:09.187373789 +0800
 @@ -60,10 +60,10 @@
  #define CONFIG_BOARD_LATE_INIT
  
@@ -47,3 +47,14 @@
  
  #define CONFIG_SYS_LOAD_ADDR		CONFIG_LOADADDR
  #define CONFIG_SYS_HZ			1000
+@@ -303,7 +304,9 @@
+ 
+ #define CONFIG_ENV_SIZE			SZ_8K
+ #if defined(CONFIG_ENV_IS_IN_MMC)
+-#define CONFIG_ENV_OFFSET		(12 * SZ_64K)
++/* moved from (12 * SZ_64K)=768KB: 1024x600 builtin logo makes u-boot >1MB,
++ * env at 768KB would be overwritten by the u-boot image itself */
++#define CONFIG_ENV_OFFSET		(32 * SZ_64K)
+ #elif defined(CONFIG_ENV_IS_IN_SPI_FLASH)
+ #define CONFIG_ENV_OFFSET		(768 * 1024)
+ #define CONFIG_ENV_SECT_SIZE		(64 * 1024)
