@@ -1,0 +1,18 @@
+# 大体积源码目录：不进 git，只通过 project-files/ 镜像跟踪被修改的文件
+sdk/
+tools/
+drivers_wifi/
+
+# 交叉编译器（431MB）
+app/gcc-*/
+
+# 编译产物
+app/rs485_test
+
+# 本地备份（回滚用，patch 目录里有对应 diff）
+*.bak
+
+# 临时文件
+*.o
+*.cmd
+*.swp
